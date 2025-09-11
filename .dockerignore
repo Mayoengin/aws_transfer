@@ -1,0 +1,14 @@
+# Git
+.git
+.gitignore
+README.md
+
+# Python
+__pycache__
+*.pyc
+.venv
+
+# AWS credentials (NEVER include in Docker image)
+.aws/
+*.pem
+.env

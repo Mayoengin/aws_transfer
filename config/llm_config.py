@@ -1,5 +1,5 @@
 """
-LLM Configuration settings for the service agent.
+LLM Configuration settings for the service agent - AWS Bedrock version.
 """
 
 from typing import Dict, Any
@@ -9,17 +9,16 @@ from dataclasses import dataclass
 
 @dataclass
 class LLMConfig:
-    """Configuration for Language Learning Model settings."""
+    """Configuration for AWS Bedrock Language Learning Model settings."""
     
-    # Local LLM settings (primary and only option)
-    local_llm_url: str = "http://127.0.0.1:1234/v1"
-    local_llm_model: str = "google/gemma-3-12b"
-    local_llm_api_key: str = "not-needed"
+    # AWS Bedrock settings
+    aws_region: str = "eu-central-1"  # Frankfurt - closest to Belgium
+    model_id: str = "anthropic.claude-3-5-sonnet-20240620-v1:0"  # Claude 3.5 Sonnet
 
     # General settings
     temperature: float = 0.2
     max_tokens: int = 4096
-    timeout: int = 5
+    timeout: int = 30
     
     # Chat history settings
     max_chat_history_length: int = 20
@@ -27,28 +26,22 @@ class LLMConfig:
 
     def __post_init__(self):
         """Load configuration from environment variables if not provided."""
-        # Override with environment variables if they exist
-        self.local_llm_url = os.getenv("LOCAL_LLM_URL", self.local_llm_url)
-        self.local_llm_model = os.getenv("LOCAL_LLM_MODEL", self.local_llm_model)
+        # AWS Bedrock settings
+        self.aws_region = os.getenv("AWS_REGION", self.aws_region)
+        self.model_id = os.getenv("BEDROCK_MODEL_ID", self.model_id)
+        
+        # General settings
         self.temperature = float(os.getenv("LLM_TEMPERATURE", self.temperature))
         self.max_tokens = int(os.getenv("LLM_MAX_TOKENS", self.max_tokens))
 
     def get_config(self) -> Dict[str, Any]:
-        """Get local LLM configuration."""
+        """Get AWS Bedrock configuration."""
         return {
-            "base_url": self.local_llm_url,
-            "api_key": self.local_llm_api_key,
-            "model": self.local_llm_model,
+            "region": self.aws_region,
+            "model_id": self.model_id,
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
         }
-
-    def get_provider_config(self, provider: str = "local") -> Dict[str, Any]:
-        """Get configuration for a specific provider (local, langchain, etc.)."""
-        if provider in ["local", "langchain"]:
-            return self.get_config()
-        else:
-            raise ValueError(f"Unknown provider: {provider}")
 
 
 # Global configuration instance

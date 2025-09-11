@@ -1,24 +1,28 @@
 """
-Simple ReAct Agent Implementation with Enhanced Tools
+Simple ReAct Agent Implementation with Enhanced Tools - AWS Bedrock version
 """
 
 import json
 import re
-from openai import OpenAI
+import boto3
+from botocore.exceptions import ClientError
 from config.llm_config import LLMConfig
 from tools.enhanced_norm_tools import EnhancedNormTools, get_available_tools_with_prompts
 
 
 class SimpleReActAgent:
-    """Simple ReAct (Reasoning + Acting) agent with tool-specific prompts."""
+    """Simple ReAct (Reasoning + Acting) agent with tool-specific prompts using AWS Bedrock."""
     
     def __init__(self, config: LLMConfig = None):
         """Initialize the agent."""
         self.config = config or LLMConfig()
-        self.client = OpenAI(
-            base_url=self.config.local_llm_url,
-            api_key=self.config.local_llm_api_key
+        
+        # Initialize AWS Bedrock client
+        self.bedrock_client = boto3.client(
+            'bedrock-runtime',
+            region_name=self.config.aws_region
         )
+        
         self.enhanced_tools = EnhancedNormTools()
         self.max_steps = 5
         
@@ -56,6 +60,56 @@ IMPORTANT RULES:
 8. Keep responses concise but informative
 """
     
+    def call_bedrock(self, messages: list) -> str:
+        """Call AWS Bedrock Claude model."""
+        try:
+            # Convert messages to Claude format
+            system_message = ""
+            conversation = []
+            
+            for msg in messages:
+                if msg["role"] == "system":
+                    system_message = msg["content"]
+                else:
+                    conversation.append({
+                        "role": msg["role"],
+                        "content": msg["content"]
+                    })
+            
+            # Prepare the request body
+            request_body = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": self.config.max_tokens,
+                "temperature": self.config.temperature,
+                "messages": conversation
+            }
+            
+            # Add system message if present
+            if system_message:
+                request_body["system"] = system_message
+            
+            # Call Bedrock
+            response = self.bedrock_client.invoke_model(
+                modelId=self.config.model_id,
+                body=json.dumps(request_body),
+                contentType='application/json'
+            )
+            
+            # Parse response
+            response_body = json.loads(response['body'].read())
+            return response_body['content'][0]['text']
+            
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == 'AccessDeniedException':
+                raise Exception(f"Access denied to model {self.config.model_id}. Please check your AWS permissions and model access in Bedrock console.")
+            elif error_code == 'ValidationException':
+                raise Exception(f"Invalid request to Bedrock: {e.response['Error']['Message']}")
+            else:
+                raise Exception(f"Bedrock error ({error_code}): {e.response['Error']['Message']}")
+        except Exception as e:
+            raise Exception(f"Error calling Bedrock: {str(e)}")
+    
     def process_query(self, query: str) -> str:
         """Process a user query through the ReAct loop."""
         return self.run(query)
@@ -68,17 +122,13 @@ IMPORTANT RULES:
         ]
         
         for step in range(self.max_steps):
-            # Get LLM response
-            response = self.client.chat.completions.create(
-                model=self.config.local_llm_model,
-                messages=messages,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens
-            )
-            
-            agent_output = response.choices[0].message.content
-            print(f"\n--- Step {step + 1} ---")
-            print(agent_output)
+            # Get LLM response using Bedrock
+            try:
+                agent_output = self.call_bedrock(messages)
+                print(f"\n--- Step {step + 1} ---")
+                print(agent_output)
+            except Exception as e:
+                return f"Error communicating with AWS Bedrock: {str(e)}\n\nPlease check:\n1. AWS credentials are configured (run 'aws configure')\n2. You have access to Claude 3.7 Sonnet in eu-central-1 region\n3. Your AWS permissions include Bedrock access"
             
             # Check for final answer
             if "Final Answer:" in agent_output:
@@ -137,7 +187,7 @@ IMPORTANT RULES:
 
 # Example usage
 if __name__ == "__main__":
-    # Create agent with default config or custom config
+    # Create agent with default config
     config = LLMConfig()
     agent = SimpleReActAgent(config)
     
