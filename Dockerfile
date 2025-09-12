@@ -1,6 +1,6 @@
 # Use Python 3.11 slim image
-FROM python:3.11-slim
-
+# FROM python:3.11-slim
+FROM public.ecr.aws/lambda/python:$PYTHON_VERSION
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
